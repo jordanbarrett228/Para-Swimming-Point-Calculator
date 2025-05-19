@@ -3,17 +3,18 @@ import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'EventData.dart';
 import 'dart:math' as math;
-import 'package:numberpicker/numberpicker.dart';
+import 'package:flutter/services.dart';
+import 'package:keyboard_actions/keyboard_actions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load the JSON file as a string
-  final jsonString = await rootBundle.loadString('lib/event_data_compact.json');
+  final String jsonString = await rootBundle.loadString('lib/event_data_compact.json');
   // Decode the string into a Map
-  final jsonData = json.decode(jsonString) as Map<String, dynamic>;
+  final Map<String, dynamic> jsonData = json.decode(jsonString) as Map<String, dynamic>;
   // Parse into your EventData class
-  final eventData = EventData.fromJson(jsonData);
+  final EventData eventData = EventData.fromJson(jsonData);
 
   runApp(MyApp(eventData: eventData));
 }
@@ -45,7 +46,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
   String? selectedGender;
 
   List<String> allEvents = eventToClasses.keys.toList();
-  List<String> genderOptions = ['Male', 'Female'];
+  List<String> genderOptions = <String>['Male', 'Female'];
 
   String calculationMode = 'Points'; // or 'Time'
   final TextEditingController inputController = TextEditingController();
@@ -56,17 +57,27 @@ class _SelectionScreenState extends State<SelectionScreen> {
   int seconds = 0;
   int milliseconds = 0;
 
+  final FocusNode _minutesFocusNode = FocusNode();
+  final FocusNode _secondsFocusNode = FocusNode();
+  final FocusNode _millisecondsFocusNode = FocusNode();
+  final FocusNode _pointsFocusNode = FocusNode();
+
+  // Add controllers for time fields
+  final TextEditingController minutesController = TextEditingController();
+  final TextEditingController secondsController = TextEditingController();
+  final TextEditingController millisecondsController = TextEditingController();
+
   List<String> getAvailableClasses(String? event) {
-    if (event == null) return [];
+    if (event == null) return <String>[];
     return eventToClasses[event]!;
   }
 
   BCValues? getSelectedBCValues() {
     if (selectedEvent == null || selectedClass == null || selectedGender == null) return null;
     try {
-      final eventEnum = stringToEventEnum(selectedEvent!);
-      final classEnum = stringToSwimClass(selectedClass!);
-      final genderEnum = stringToGender(selectedGender!.toLowerCase());
+      final EventName eventEnum = stringToEventEnum(selectedEvent!);
+      final SwimClass classEnum = stringToSwimClass(selectedClass!);
+      final Gender genderEnum = stringToGender(selectedGender!.toLowerCase());
       return widget.eventData.getBC(eventEnum, classEnum, genderEnum);
     } catch (e) {
       return null;
@@ -74,20 +85,20 @@ class _SelectionScreenState extends State<SelectionScreen> {
   }
 
   void calculate() {
-    final bc = getSelectedBCValues();
+    final BCValues? bc = getSelectedBCValues();
     if (bc == null) {
       setState(() {
         resultText = 'Please select all options.';
       });
       return;
     }
-    final b = bc.b;
-    final c = bc.c;
-    final a = 1200.0;
+    final double b = bc.b;
+    final double c = bc.c;
+    final double a = 1200.0;
 
     try {
       if (calculationMode == 'Points') {
-        final totalSeconds = minutes * 60 + seconds + milliseconds / 1000.0;
+        final double totalSeconds = minutes * 60 + seconds + milliseconds / 1000.0;
 
         if (totalSeconds <= 0) {
           setState(() {
@@ -95,20 +106,20 @@ class _SelectionScreenState extends State<SelectionScreen> {
           });
           return;
         }
-        final points = a * math.exp(-math.exp(b - (c / totalSeconds)));
+        final double points = a * math.exp(-math.exp(b - (c / totalSeconds)));
         setState(() {
           resultText = 'Points: ${points.toStringAsFixed(2)}';
         });
       } else {
-        final pointsStr = inputController.text;
-        final points = double.tryParse(pointsStr);
+        final String pointsStr = inputController.text;
+        final double? points = double.tryParse(pointsStr);
         if (points == null || points <= 0 || points >= a) {
           setState(() {
             resultText = 'Enter a valid points value (0 < points < $a).';
           });
           return;
         }
-        final time = c / (b - math.log(math.log(a / points)));
+        final double time = c / (b - math.log(math.log(a / points)));
         setState(() {
           resultText = 'Required Time: ${formatTimeVerbose(time)}';
         });
@@ -124,6 +135,49 @@ class _SelectionScreenState extends State<SelectionScreen> {
   void initState() {
     super.initState();
     inputController.addListener(_onInputChanged);
+
+    // Initialize controllers with default values
+    minutesController.text = minutes.toString();
+    secondsController.text = seconds.toString();
+    millisecondsController.text = milliseconds.toString();
+
+    // Add listeners to update state and recalculate
+    minutesController.addListener(() {
+      final int intValue = int.tryParse(minutesController.text) ?? 0;
+      final int clamped = intValue.clamp(0, 59);
+      if (intValue != clamped) {
+        minutesController.text = clamped.toString();
+        minutesController.selection = TextSelection.fromPosition(TextPosition(offset: minutesController.text.length));
+      }
+      setState(() {
+        minutes = clamped;
+      });
+      calculate();
+    });
+    secondsController.addListener(() {
+      final int intValue = int.tryParse(secondsController.text) ?? 0;
+      final int clamped = intValue.clamp(0, 59);
+      if (intValue != clamped) {
+        secondsController.text = clamped.toString();
+        secondsController.selection = TextSelection.fromPosition(TextPosition(offset: secondsController.text.length));
+      }
+      setState(() {
+        seconds = clamped;
+      });
+      calculate();
+    });
+    millisecondsController.addListener(() {
+      final int intValue = int.tryParse(millisecondsController.text) ?? 0;
+      final int clamped = intValue.clamp(0, 999);
+      if (intValue != clamped) {
+        millisecondsController.text = clamped.toString();
+        millisecondsController.selection = TextSelection.fromPosition(TextPosition(offset: millisecondsController.text.length));
+      }
+      setState(() {
+        milliseconds = clamped;
+      });
+      calculate();
+    });
   }
 
   void _onInputChanged() {
@@ -133,47 +187,132 @@ class _SelectionScreenState extends State<SelectionScreen> {
   @override
   void dispose() {
     inputController.dispose();
+    minutesController.dispose();
+    secondsController.dispose();
+    millisecondsController.dispose();
+    _minutesFocusNode.dispose();
+    _secondsFocusNode.dispose();
+    _millisecondsFocusNode.dispose();
+    _pointsFocusNode.dispose();
     super.dispose();
+  }
+
+  // Helper to build number input with done button
+  Widget buildNumberInput({
+    required String label,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    double width = 60,
+  }) {
+    return Column(
+      children: <Widget>[
+        Text(label),
+        SizedBox(
+          width: width,
+          child: TextField(
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              border: OutlineInputBorder(),
+            ),
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.digitsOnly,
+            ],
+            controller: controller,
+            focusNode: focusNode,
+            onTap: () {
+              controller.selection = TextSelection(
+                baseOffset: 0,
+                extentOffset: controller.text.length,
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bcValues = getSelectedBCValues();
+    final BCValues? bcValues = getSelectedBCValues();
+
+    // KeyboardActions config for all fields
+    final keyboardConfig = KeyboardActionsConfig(
+      actions: [
+        KeyboardActionsItem(
+          focusNode: _minutesFocusNode,
+          toolbarButtons: [
+            (node) => TextButton(
+              onPressed: () => node.unfocus(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+        KeyboardActionsItem(
+          focusNode: _secondsFocusNode,
+          toolbarButtons: [
+            (node) => TextButton(
+              onPressed: () => node.unfocus(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+        KeyboardActionsItem(
+          focusNode: _millisecondsFocusNode,
+          toolbarButtons: [
+            (node) => TextButton(
+              onPressed: () => node.unfocus(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+        KeyboardActionsItem(
+          focusNode: _pointsFocusNode,
+          toolbarButtons: [
+            (node) => TextButton(
+              onPressed: () => node.unfocus(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ],
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Para Swimming Point Calculator')),
+      appBar: AppBar(title: const Text('Point Calculator')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ListView(
-          children: [
+          children: <Widget>[
             DropdownButtonFormField<String>(
               value: selectedEvent,
-              hint: const Text("Select Event"),
+              hint: const Text('Select Event'),
               items: allEvents
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .map((String e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),
-              onChanged: (value) {
+              onChanged: (String? value) {
                 setState(() {
                   selectedEvent = value;
-                  final classes = getAvailableClasses(selectedEvent);
+                  final List<String> classes = getAvailableClasses(selectedEvent);
                   selectedClass = classes.isNotEmpty ? classes.first : null;
                   calculate();
                 });
               },
             ),
-            if (selectedEvent != null) ...[
+            if (selectedEvent != null) ...<Widget>[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: <Widget>[
                     const Text('Select Class:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: getAvailableClasses(selectedEvent)
-                          .map((cls) => ChoiceChip(
+                          .map((String cls) => ChoiceChip(
                                 label: Text(cls),
                                 selected: selectedClass == cls,
                                 onSelected: (_) {
@@ -191,20 +330,20 @@ class _SelectionScreenState extends State<SelectionScreen> {
             ],
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+              children: <Widget>[
                 ToggleButtons(
-                  isSelected: [
+                  isSelected: <bool>[
                     selectedGender == 'Male',
                     selectedGender == 'Female',
                   ],
-                  onPressed: (index) {
+                  onPressed: (int index) {
                     setState(() {
                       selectedGender = index == 0 ? 'Male' : 'Female';
                       calculate();
                     });
                   },
                   borderRadius: BorderRadius.circular(8),
-                  children: const [
+                  children: const <Widget>[
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
                       child: Text('Male'),
@@ -218,7 +357,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            if (bcValues != null) ...[
+            if (bcValues != null) ...<Widget>[
               Padding(
                 padding: const EdgeInsets.only(bottom: 4.0),
                 child: Center(
@@ -232,17 +371,16 @@ class _SelectionScreenState extends State<SelectionScreen> {
             ],
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+              children: <Widget>[
                 ToggleButtons(
-                  isSelected: [
+                  isSelected: <bool>[
                     calculationMode == 'Points',
                     calculationMode == 'Time',
                   ],
-                  onPressed: (index) {
+                  onPressed: (int index) {
                     setState(() {
                       calculationMode = index == 0 ? 'Points' : 'Time';
                       if (calculationMode == 'Points') {
-                        inputController.clear();
                         minutes = 0;
                         seconds = 0;
                         milliseconds = 0;
@@ -254,7 +392,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
                     calculate();
                   },
                   borderRadius: BorderRadius.circular(8),
-                  children: const [
+                  children: const <Widget>[
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
                       child: Text('Points from Time'),
@@ -268,65 +406,37 @@ class _SelectionScreenState extends State<SelectionScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            if (calculationMode == 'Points') ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Column(
-                    children: [
-                      const Text('Minutes'),
-                      NumberPicker(
-                        value: minutes,
-                        minValue: 0,
-                        maxValue: 59,
-                        onChanged: (value) {
-                          setState(() {
-                            minutes = value;
-                            calculate();
-                          });
-                        },
+            if (calculationMode == 'Points') ...<Widget>[
+              SizedBox(
+                height: 90, // or whatever fits your design
+                child: KeyboardActions(
+                  config: keyboardConfig,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      buildNumberInput(
+                        label: 'Minutes',
+                        controller: minutesController,
+                        focusNode: _minutesFocusNode,
+                      ),
+                      const SizedBox(width: 8),
+                      buildNumberInput(
+                        label: 'Seconds',
+                        controller: secondsController,
+                        focusNode: _secondsFocusNode,
+                      ),
+                      const SizedBox(width: 8),
+                      buildNumberInput(
+                        label: 'Milliseconds',
+                        controller: millisecondsController,
+                        focusNode: _millisecondsFocusNode,
+                        width: 70,
                       ),
                     ],
                   ),
-                  const SizedBox(width: 8),
-                  Column(
-                    children: [
-                      const Text('Seconds'),
-                      NumberPicker(
-                        value: seconds,
-                        minValue: 0,
-                        maxValue: 59,
-                        onChanged: (value) {
-                          setState(() {
-                            seconds = value;
-                            calculate();
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    children: [
-                      const Text('Milliseconds'),
-                      NumberPicker(
-                        value: milliseconds,
-                        minValue: 0,
-                        maxValue: 999,
-                        step: 10,
-                        zeroPad: true,
-                        onChanged: (value) {
-                          setState(() {
-                            milliseconds = value;
-                            calculate();
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
-              if (calculationMode == 'Points' && bcValues != null) ...[
+              if (calculationMode == 'Points' && bcValues != null) ...<Widget>[
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
                   child: Center(
@@ -338,16 +448,29 @@ class _SelectionScreenState extends State<SelectionScreen> {
                   ),
                 ),
               ],
-            ] else ...[
-              TextField(
-  key: const ValueKey('pointsField'),
-  controller: inputController,
-  keyboardType: TextInputType.numberWithOptions(decimal: true),
-  decoration: const InputDecoration(
-    labelText: 'Enter Desired Points',
-    border: OutlineInputBorder(),
-  ),
-),
+            ] else ...<Widget>[
+              SizedBox(
+                height: 70,
+                child: KeyboardActions(
+                  config: keyboardConfig,
+                  child: TextField(
+                    key: const ValueKey('pointsField'),
+                    controller: inputController,
+                    focusNode: _pointsFocusNode,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Enter Desired Points',
+                      border: OutlineInputBorder(),
+                    ),
+                    onTap: () {
+                      inputController.selection = TextSelection(
+                        baseOffset: 0,
+                        extentOffset: inputController.text.length,
+                      );
+                    },
+                  ),
+                ),
+              ),
             ],
             const SizedBox(height: 24),
             Text(
@@ -373,10 +496,10 @@ double calculateTime({required double points, required double b, required double
 }
 
 String formatTimeVerbose(double seconds) {
-  final mins = seconds ~/ 60;
-  final secs = (seconds % 60).floor();
-  final millis = ((seconds - seconds.floor()) * 1000).round();
-  List<String> parts = [];
+  final int mins = seconds ~/ 60;
+  final int secs = (seconds % 60).floor();
+  final int millis = ((seconds - seconds.floor()) * 1000).round();
+  List<String> parts = <String>[];
   if (mins > 0) parts.add('$mins m');
   if (secs > 0) parts.add('$secs s');
   if (millis > 0) parts.add('$millis ms');
@@ -385,11 +508,11 @@ String formatTimeVerbose(double seconds) {
 }
 
 String getRecommendedTimeRange(double b, double c, {double a = 1200}) {
-  final minPoints = 1; 
-  final maxPoints = 1199;
+  final int minPoints = 1; 
+  final int maxPoints = 1199;
 
-  final minTime = c / (b - math.log(math.log(a / minPoints)));
-  final maxTime = c / (b - math.log(math.log(a / maxPoints)));
+  final double minTime = c / (b - math.log(math.log(a / minPoints)));
+  final double maxTime = c / (b - math.log(math.log(a / maxPoints)));
 
   return 'Recommended time range: ${formatTimeVerbose(maxTime)} to ${formatTimeVerbose(minTime)}';
 }
