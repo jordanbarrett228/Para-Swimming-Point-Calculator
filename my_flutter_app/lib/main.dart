@@ -43,7 +43,7 @@ class SelectionScreen extends StatefulWidget {
 class _SelectionScreenState extends State<SelectionScreen> {
   String? selectedEvent;
   String? selectedClass;
-  String? selectedGender;
+  String? selectedGender = 'Male'; // Set default to 'Male'
 
   List<String> allEvents = eventToClasses.keys.toList();
   List<String> genderOptions = <String>['Male', 'Female'];
@@ -381,14 +381,6 @@ class _SelectionScreenState extends State<SelectionScreen> {
                   onPressed: (int index) {
                     setState(() {
                       calculationMode = index == 0 ? 'Points' : 'Time';
-                      if (calculationMode == 'Points') {
-                        minutes = 0;
-                        seconds = 0;
-                        milliseconds = 0;
-                      } else {
-                        // No need to clear pickers when switching to Time mode
-                      }
-                      resultText = '';
                     });
                     calculate();
                   },
@@ -501,7 +493,7 @@ double calculateTime({required double points, required double b, required double
 String formatTimeVerbose(double seconds) {
   final int mins = seconds ~/ 60;
   final int secs = (seconds % 60).floor();
-  final int millis = ((seconds - seconds.floor()) * 1000).round();
+  final int millis = ((seconds - seconds.floor()) * 100).round();
   List<String> parts = <String>[];
   if (mins > 0) parts.add('$mins m');
   if (secs > 0) parts.add('$secs s');
