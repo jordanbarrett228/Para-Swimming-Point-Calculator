@@ -168,7 +168,8 @@ class _SelectionScreenState extends State<SelectionScreen> {
     });
     millisecondsController.addListener(() {
       final int intValue = int.tryParse(millisecondsController.text) ?? 0;
-      final int clamped = intValue.clamp(0, 999);
+      // Clamp to 0-99 for two digits only
+      final int clamped = intValue.clamp(0, 99);
       if (intValue != clamped) {
         millisecondsController.text = clamped.toString();
         millisecondsController.selection = TextSelection.fromPosition(TextPosition(offset: millisecondsController.text.length));
