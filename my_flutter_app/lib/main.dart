@@ -43,7 +43,7 @@ class SelectionScreen extends StatefulWidget {
 class _SelectionScreenState extends State<SelectionScreen> {
   String? selectedEvent;
   String? selectedClass;
-  String? selectedGender;
+  String? selectedGender = 'Male'; // Set default to 'Male'
 
   List<String> allEvents = eventToClasses.keys.toList();
   List<String> genderOptions = <String>['Male', 'Female'];
@@ -106,9 +106,9 @@ class _SelectionScreenState extends State<SelectionScreen> {
           });
           return;
         }
-        final double points = a * math.exp(-math.exp(b - (c / totalSeconds)));
+        final int points = calculatePoints(time: totalSeconds, b: b, c: c, a: a);
         setState(() {
-          resultText = 'Points: ${points.toStringAsFixed(2)}';
+          resultText = 'Points: $points';
         });
       } else {
         final String pointsStr = inputController.text;
@@ -119,7 +119,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
           });
           return;
         }
-        final double time = c / (b - math.log(math.log(a / points)));
+        final double time = calculateTime(points: points, b: b, c: c, a: a);
         setState(() {
           resultText = 'Required Time: ${formatTimeVerbose(time)}';
         });
@@ -168,7 +168,8 @@ class _SelectionScreenState extends State<SelectionScreen> {
     });
     millisecondsController.addListener(() {
       final int intValue = int.tryParse(millisecondsController.text) ?? 0;
-      final int clamped = intValue.clamp(0, 999);
+      // Clamp to 0-99 for two digits only
+      final int clamped = intValue.clamp(0, 99);
       if (intValue != clamped) {
         millisecondsController.text = clamped.toString();
         millisecondsController.selection = TextSelection.fromPosition(TextPosition(offset: millisecondsController.text.length));
@@ -380,14 +381,6 @@ class _SelectionScreenState extends State<SelectionScreen> {
                   onPressed: (int index) {
                     setState(() {
                       calculationMode = index == 0 ? 'Points' : 'Time';
-                      if (calculationMode == 'Points') {
-                        minutes = 0;
-                        seconds = 0;
-                        milliseconds = 0;
-                      } else {
-                        // No need to clear pickers when switching to Time mode
-                      }
-                      resultText = '';
                     });
                     calculate();
                   },
@@ -486,19 +479,21 @@ class _SelectionScreenState extends State<SelectionScreen> {
 
 
 // Calculate points from time (performance)
-double calculatePoints({required double time, required double b, required double c, double a = 1200}) {
-  return a * math.exp(-math.exp(b - (c / time)));
+int calculatePoints({required double time, required double b, required double c, double a = 1200}) {
+  return (a * math.exp(-math.exp(b - (c / time)))).truncate();
 }
 
 // Calculate time from points (inverse Gompertz)
 double calculateTime({required double points, required double b, required double c, double a = 1200}) {
-  return c / (b - math.log(math.log(a / points)));
+  double rawTime = c / (b - math.log(math.log(a / points)));
+  // Truncate to 2 decimal places
+  return (rawTime * 100).truncateToDouble() / 100;
 }
 
 String formatTimeVerbose(double seconds) {
   final int mins = seconds ~/ 60;
   final int secs = (seconds % 60).floor();
-  final int millis = ((seconds - seconds.floor()) * 1000).round();
+  final int millis = ((seconds - seconds.floor()) * 100).round();
   List<String> parts = <String>[];
   if (mins > 0) parts.add('$mins m');
   if (secs > 0) parts.add('$secs s');
