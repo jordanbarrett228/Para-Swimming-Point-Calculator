@@ -106,9 +106,9 @@ class _SelectionScreenState extends State<SelectionScreen> {
           });
           return;
         }
-        final double points = a * math.exp(-math.exp(b - (c / totalSeconds)));
+        final int points = calculatePoints(time: totalSeconds, b: b, c: c, a: a);
         setState(() {
-          resultText = 'Points: ${points.toStringAsFixed(2)}';
+          resultText = 'Points: $points';
         });
       } else {
         final String pointsStr = inputController.text;
@@ -119,7 +119,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
           });
           return;
         }
-        final double time = c / (b - math.log(math.log(a / points)));
+        final double time = calculateTime(points: points, b: b, c: c, a: a);
         setState(() {
           resultText = 'Required Time: ${formatTimeVerbose(time)}';
         });
@@ -486,13 +486,15 @@ class _SelectionScreenState extends State<SelectionScreen> {
 
 
 // Calculate points from time (performance)
-double calculatePoints({required double time, required double b, required double c, double a = 1200}) {
-  return a * math.exp(-math.exp(b - (c / time)));
+int calculatePoints({required double time, required double b, required double c, double a = 1200}) {
+  return (a * math.exp(-math.exp(b - (c / time)))).truncate();
 }
 
 // Calculate time from points (inverse Gompertz)
 double calculateTime({required double points, required double b, required double c, double a = 1200}) {
-  return c / (b - math.log(math.log(a / points)));
+  double rawTime = c / (b - math.log(math.log(a / points)));
+  // Truncate to 2 decimal places
+  return (rawTime * 100).truncateToDouble() / 100;
 }
 
 String formatTimeVerbose(double seconds) {
